@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 2.4.4...3.15.0)
 set(CMAKE_ALLOW_LOOSE_LOOP_CONSTRUCTS ON)
 
-project(zlib C)
+project(ZLIB LANGUAGES C VERSION 1.3.1)
 
 set(VERSION "1.3.1")
 
 option(ZLIB_BUILD_EXAMPLES "Enable Zlib Examples" ON)
 
-set(INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Installation directory for executables")
-set(INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib" CACHE PATH "Installation directory for libraries")
-set(INSTALL_INC_DIR "${CMAKE_INSTALL_PREFIX}/include" CACHE PATH "Installation directory for headers")
+#set(INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Installation directory for executables")
+#set(INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib" CACHE PATH "Installation directory for libraries")
+#set(INSTALL_INC_DIR "${CMAKE_INSTALL_PREFIX}/include" CACHE PATH "Installation directory for headers")
 set(INSTALL_MAN_DIR "${CMAKE_INSTALL_PREFIX}/share/man" CACHE PATH "Installation directory for manual pages")
 set(INSTALL_PKGCONFIG_DIR "${CMAKE_INSTALL_PREFIX}/share/pkgconfig" CACHE PATH "Installation directory for pkgconfig (.pc) files")
 
@@ -149,29 +149,46 @@ if(MINGW)
     set(ZLIB_DLL_SRCS ${CMAKE_CURRENT_BINARY_DIR}/zlib1rc.obj)
 endif(MINGW)
 
-add_library(zlib SHARED ${ZLIB_SRCS} ${ZLIB_DLL_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
-target_include_directories(zlib PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
-add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
-target_include_directories(zlibstatic PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
-set_target_properties(zlib PROPERTIES DEFINE_SYMBOL ZLIB_DLL)
-set_target_properties(zlib PROPERTIES SOVERSION 1)
+include(GNUInstallDirs)
 
-if(NOT CYGWIN)
-    # This property causes shared libraries on Linux to have the full version
-    # encoded into their final filename.  We disable this on Cygwin because
-    # it causes cygz-${ZLIB_FULL_VERSION}.dll to be created when cygz.dll
-    # seems to be the default.
-    #
-    # This has no effect with MSVC, on that platform the version info for
-    # the DLL comes from the resource file win32/zlib1.rc
-    set_target_properties(zlib PROPERTIES VERSION ${ZLIB_FULL_VERSION})
+
+if (BUILD_SHARED_LIBS)
+  set(ZLIB_TARGET zlib)
+  add_library(zlib SHARED ${ZLIB_SRCS} ${ZLIB_DLL_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
+  set_target_properties(zlib PROPERTIES DEFINE_SYMBOL ZLIB_DLL)
+  set_target_properties(zlib PROPERTIES SOVERSION 1)
+
+  if(NOT CYGWIN)
+      # This property causes shared libraries on Linux to have the full version
+      # encoded into their final filename.  We disable this on Cygwin because
+      # it causes cygz-${ZLIB_FULL_VERSION}.dll to be created when cygz.dll
+      # seems to be the default.
+      #
+      # This has no effect with MSVC, on that platform the version info for
+      # the DLL comes from the resource file win32/zlib1.rc
+      set_target_properties(zlib PROPERTIES VERSION ${ZLIB_FULL_VERSION})
+  endif()
+
+else()
+
+  set(ZLIB_TARGET zlibstatic)
+  add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
+
 endif()
+
+target_include_directories(
+    ${ZLIB_TARGET}
+    INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_BINARY_DIR}>
+              $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 if(UNIX)
     # On unix-like platforms the library is almost always called libz
-   set_target_properties(zlib zlibstatic PROPERTIES OUTPUT_NAME z)
-   if(NOT APPLE AND NOT(CMAKE_SYSTEM_NAME STREQUAL AIX))
-     set_target_properties(zlib PROPERTIES LINK_FLAGS "-Wl,--version-script,\"${CMAKE_CURRENT_SOURCE_DIR}/zlib.map\"")
+   set_target_properties(${ZLIB_TARGET} PROPERTIES OUTPUT_NAME z)
+   if (BUILD_SHARED_LIBS)
+     if(NOT APPLE AND NOT(CMAKE_SYSTEM_NAME STREQUAL AIX))
+       set_target_properties(zlib PROPERTIES LINK_FLAGS "-Wl,--version-script,\"${CMAKE_CURRENT_SOURCE_DIR}/zlib.map\"")
+     endif()
    endif()
 elseif(BUILD_SHARED_LIBS AND WIN32)
     # Creates zlib1.dll when building shared library version
@@ -179,13 +196,14 @@ elseif(BUILD_SHARED_LIBS AND WIN32)
 endif()
 
 if(NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL )
-    install(TARGETS zlib zlibstatic
-        RUNTIME DESTINATION "${INSTALL_BIN_DIR}"
-        ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
-        LIBRARY DESTINATION "${INSTALL_LIB_DIR}" )
+    install(TARGETS ${ZLIB_TARGET}
+        EXPORT ${PROJECT_NAME}_Targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 if(NOT SKIP_INSTALL_HEADERS AND NOT SKIP_INSTALL_ALL )
-    install(FILES ${ZLIB_PUBLIC_HDRS} DESTINATION "${INSTALL_INC_DIR}")
+    install(FILES ${ZLIB_PUBLIC_HDRS} DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 endif()
 if(NOT SKIP_INSTALL_FILES AND NOT SKIP_INSTALL_ALL )
     install(FILES zlib.3 DESTINATION "${INSTALL_MAN_DIR}/man3")
@@ -194,6 +212,28 @@ if(NOT SKIP_INSTALL_FILES AND NOT SKIP_INSTALL_ALL )
     install(FILES ${ZLIB_PC} DESTINATION "${INSTALL_PKGCONFIG_DIR}")
 endif()
 
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file("ZLIBConfigVersion.cmake"
+                                 VERSION ${PROJECT_VERSION}
+                                 COMPATIBILITY SameMajorVersion)
+
+configure_package_config_file(
+    "${PROJECT_SOURCE_DIR}/cmake/zlib-config.cmake.in"
+    "${PROJECT_BINARY_DIR}/ZLIBConfig.cmake"
+    INSTALL_DESTINATION
+      cmake
+)
+
+
+ install(EXPORT ${PROJECT_NAME}_Targets
+    FILE ZLIBTargets.cmake
+    NAMESPACE ZLIB::
+    DESTINATION cmake)
+
+install(FILES 
+  "${PROJECT_BINARY_DIR}/ZLIBConfig.cmake"
+  "${PROJECT_BINARY_DIR}/ZLIBConfigVersion.cmake"
+  DESTINATION cmake)
 #============================================================================
 # Example binaries
 #============================================================================

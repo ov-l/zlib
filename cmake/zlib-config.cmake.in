@@ -1,0 +1,22 @@
+
+@PACKAGE_INIT@
+
+
+
+if (NOT TARGET ZLIB::ZLIB)
+
+include("${CMAKE_CURRENT_LIST_DIR}/ZLIBTargets.cmake")
+
+if (@BUILD_SHARED_LIBS@)
+  add_library(ZLIB::ZLIB ALIAS ZLIB::zlib)
+else()
+  add_library(ZLIB::ZLIB ALIAS ZLIB::zlibstatic)
+endif()
+
+endif()
+
+get_target_property(ZLIB_INCLUDE_DIRS ZLIB::ZLIB INTERFACE_INCLUDE_DIRECTORIES)
+set(ZLIB_INCLUDE_DIR "${ZLIB_INCLUDE_DIRS}" CACHE INTERNAL "ZLIB include directory")
+
+check_required_components("ZLIB")
+
